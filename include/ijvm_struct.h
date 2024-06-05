@@ -5,6 +5,7 @@
 #include <stdio.h>  /* contains type FILE * */
 
 #include "ijvm_types.h"
+#include "stack_struct.h"
 /**
  * All the state of your IJVM machine goes in this struct!
  **/
@@ -17,12 +18,24 @@ typedef struct IJVM {
 
   // your variables go here
   uint32_t magic_num;
+  // Constant Pool
   uint32_t constant_origin;
   uint32_t constant_size;
-  int32_t *constant_data;
+  word_t *constant_data;
+
+  // Text Pool
   uint32_t text_origin;
   uint32_t text_size;
   uint8_t *text_data;
+
+  // Program Counter
+  uint32_t pc;
+  bool is_finished;
+
+  // Stack
+  stack *st;
+
+
 
 } ijvm;
 
