@@ -29,7 +29,7 @@ typedef struct IJVM {
   uint8_t *text_data;
 
   // Program Counter
-  uint32_t pc;
+  word_t pc;
   bool is_finished;
 
   // Stack

@@ -123,6 +123,7 @@ unsigned int get_program_counter(ijvm* m)
 
 word_t tos(ijvm* m) 
 {
+  
   return m->st->data[m->st->index_top-1];
 }
 
@@ -135,6 +136,11 @@ word_t get_local_variable(ijvm* m, int i)
 {
   // TODO: implement me
   return 0;
+}
+
+int16_t get_goto_short(ijvm* m) {
+  uint8_t short_bytes[] = {get_text(m)[m->pc+1], get_text(m)[m->pc+2]};
+  return read_int16(short_bytes)-1;
 }
 
 void step(ijvm* m) 
@@ -203,11 +209,42 @@ void step(ijvm* m)
     }
     case OP_OUT: {
       fprintf(m->out, "%c", (char)pop(m));
+      break;
+    }
+    case OP_GOTO: {
+      m->pc += get_goto_short(m);
+      break;
+    }
+    case OP_IFEQ: {
+      if(pop(m) == 0){
+        m->pc += get_goto_short(m);
+      } else {
+        m->pc += 2;
+      }
+      break;
+    }
+    case OP_IFLT: {
+      if(pop(m) < 0){
+        m->pc += get_goto_short(m);
+      } else {
+        m->pc += 2;
+      }
+      break;
+    }
+    case OP_IF_ICMPEQ: {
+      if(pop(m) == pop(m)){
+        m->pc += get_goto_short(m);
+      } else {
+        m->pc += 2;
+      }
+      break;
     }
   }
 
   m->pc++;
 }
+
+
 
 byte_t get_instruction(ijvm* m) 
 { 
