@@ -1,0 +1,36 @@
+.main
+
+    IN
+    IN
+    DUP
+    DUP
+    DUP
+    DUP
+    IN
+
+    DUP
+    BIPUSH 0x3
+    IADD
+    OUT
+
+    IADD
+    DUP
+    OUT
+
+    SWAP
+    ISUB
+    SWAP
+    ISUB
+    DUP
+    OUT
+
+    IADD
+    IADD
+    IADD
+    BIPUSH 0XA
+    ISUB
+    OUT
+
+    HALT
+
+.end-main
