@@ -1,0 +1,24 @@
+.main   
+    IN
+    IN
+
+    loop:
+        SWAP
+        DUP
+        OUT
+
+        BIPUSH  0x2
+        IADD
+
+        SWAP
+        DUP
+        IFEQ    endLoop
+
+        BIPUSH  0x1
+        ISUB
+        GOTO    loop
+    
+    endLoop:
+        HALT
+
+.end-main
