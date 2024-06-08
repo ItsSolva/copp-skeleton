@@ -1,5 +1,6 @@
 #include <stdio.h>  // for getc, printf
 #include <stdlib.h> // malloc, free
+#include <assert.h>
 #include "ijvm.h"
 #include "stack_struct.h"
 #include "util.h" // read this file for debug prints, endianness helper functions
@@ -93,6 +94,12 @@ ijvm* init_ijvm(char *binary_path, FILE* input , FILE* output)
   m->st->size = 1024;
   m->st->data = (int8_t *)malloc(sizeof(int8_t) * m->st->size);
 
+  for (int i = 0; i < 256; i++)
+  {
+    push(m, i);
+  }
+  
+
   return m;
 }
 
@@ -123,7 +130,7 @@ unsigned int get_program_counter(ijvm* m)
 
 word_t tos(ijvm* m) 
 {
-  
+  assert(m->st->index_top > 0);
   return m->st->data[m->st->index_top-1];
 }
 
@@ -134,13 +141,13 @@ bool finished(ijvm* m)
 
 word_t get_local_variable(ijvm* m, int i) 
 {
-  // TODO: implement me
-  return 0;
+  word_t local_var = m->st->data[i];
+  return local_var;
 }
 
-int16_t get_goto_short(ijvm* m) {
+int16_t get_short_arg(ijvm* m) {
   uint8_t short_bytes[] = {get_text(m)[m->pc+1], get_text(m)[m->pc+2]};
-  return read_int16(short_bytes)-1;
+  return read_int16(short_bytes);
 }
 
 void step(ijvm* m) 
@@ -155,7 +162,7 @@ void step(ijvm* m)
   switch(instruction) {
     case OP_BIPUSH: {
       m->pc++;
-      push(m, (int8_t)get_text(m)[m->pc]);
+      push(m, get_instruction(m));
       break;
     }
     case OP_DUP: {
@@ -212,12 +219,12 @@ void step(ijvm* m)
       break;
     }
     case OP_GOTO: {
-      m->pc += get_goto_short(m);
+      m->pc += get_short_arg(m)-1;
       break;
     }
     case OP_IFEQ: {
       if(pop(m) == 0){
-        m->pc += get_goto_short(m);
+        m->pc += get_short_arg(m)-1;
       } else {
         m->pc += 2;
       }
@@ -225,7 +232,7 @@ void step(ijvm* m)
     }
     case OP_IFLT: {
       if(pop(m) < 0){
-        m->pc += get_goto_short(m);
+        m->pc += get_short_arg(m)-1;
       } else {
         m->pc += 2;
       }
@@ -233,18 +240,60 @@ void step(ijvm* m)
     }
     case OP_IF_ICMPEQ: {
       if(pop(m) == pop(m)){
-        m->pc += get_goto_short(m);
+        m->pc += get_short_arg(m)-1;
       } else {
         m->pc += 2;
       }
       break;
     }
+    case OP_LDC_W: {
+      push(m, get_constant(m, get_short_arg(m)));
+      m->pc += 2;
+      break;
+    }
+    case OP_ILOAD: {
+      m->pc++;
+      push(m, get_local_variable(m, get_instruction(m)));
+      break;
+    }
+    case OP_ISTORE: {
+      m->pc++;
+      m->st->data[get_instruction(m)] = pop(m);
+      break;
+    }
+    case OP_IINC: {
+      m->pc++;
+      byte_t index = get_instruction(m);
+      m->pc++;
+      m->st->data[index] += get_instruction(m);
+      break;
+    }
+    case OP_WIDE: {
+      m->pc++;
+      byte_t next_instruction = get_instruction(m);
+      m->pc++;
+      uint16_t index = (uint16_t)((uint16_t)get_instruction(m) << 8) | (uint16_t)get_text(m)[m->pc+1];
+      m->pc++;
+      switch (next_instruction)
+      {
+        case OP_ILOAD:
+          push(m, get_local_variable(m,index));
+          break;
+        case OP_ISTORE: {
+          m->st->data[index] = pop(m);
+          break;
+        }
+        case OP_IINC: {
+          m->pc++;
+          m->st->data[index] += get_instruction(m);
+          break;
+        }
+      }
+      break;
+    }
   }
-
   m->pc++;
 }
-
-
 
 byte_t get_instruction(ijvm* m) 
 { 
