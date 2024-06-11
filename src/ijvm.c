@@ -89,6 +89,7 @@ ijvm *init_ijvm(char *binary_path, FILE *input, FILE *output)
   m->st->size = 1024;
   m->st->data = (int8_t *)malloc(sizeof(int8_t) * m->st->size);
 
+  m->lv = 0;
   for (int i = 0; i < 256; i++)
   {
     push(m, i);
@@ -134,7 +135,7 @@ bool finished(ijvm *m)
 
 word_t get_local_variable(ijvm *m, int i)
 {
-  word_t local_var = m->st->data[i];
+  word_t local_var = m->st->data[i + m->lv];
   return local_var;
 }
 
@@ -142,6 +143,16 @@ int16_t get_short_arg(ijvm *m)
 {
   uint8_t short_bytes[] = {get_text(m)[m->pc + 1], get_text(m)[m->pc + 2]};
   return read_int16(short_bytes);
+}
+
+void print_stack(ijvm *m)
+{
+  printf("STACK: ");
+  for (int i = 0; i < m->st->index_top; i++)
+  {
+    printf("%d, ", m->st->data[i]);
+  }
+  printf("\n");
 }
 
 void step(ijvm *m)
@@ -156,171 +167,210 @@ void step(ijvm *m)
 
   switch (instruction)
   {
-  case OP_BIPUSH:
-  {
-    m->pc++;
-    push(m, get_instruction(m));
-    break;
-  }
-  case OP_DUP:
-  {
-    push(m, tos(m));
-    break;
-  }
-  case OP_IADD:
-  {
-    push(m, pop(m) + pop(m));
-    break;
-  }
-  case OP_IAND:
-  {
-    push(m, pop(m) & pop(m));
-    break;
-  }
-  case OP_IOR:
-  {
-    push(m, pop(m) | pop(m));
-    break;
-  }
-  case OP_ISUB:
-  {
-    int8_t val1 = pop(m);
-    int8_t val2 = pop(m);
-    push(m, val2 - val1);
-    break;
-  }
-  case OP_NOP:
-  {
-    break;
-  }
-  case OP_POP:
-  {
-    pop(m);
-    break;
-  }
-  case OP_SWAP:
-  {
-    int8_t val1 = pop(m);
-    int8_t val2 = pop(m);
-    push(m, val1);
-    push(m, val2);
-    break;
-  }
-  case OP_ERR:
-  {
-    fprintf(m->out, "ERROR\n");
-    m->is_finished = true;
-    break;
-  }
-  case OP_HALT:
-  {
-    m->is_finished = true;
-    break;
-  }
-  case OP_IN:
-  {
-    push(m, fgetc(m->in));
-    break;
-  }
-  case OP_OUT:
-  {
-    fprintf(m->out, "%c", (char)pop(m));
-    break;
-  }
-  case OP_GOTO:
-  {
-    m->pc += get_short_arg(m) - 1;
-    break;
-  }
-  case OP_IFEQ:
-  {
-    if (pop(m) == 0)
+    case OP_BIPUSH:
     {
-      m->pc += get_short_arg(m) - 1;
-    }
-    else
-    {
-      m->pc += 2;
-    }
-    break;
-  }
-  case OP_IFLT:
-  {
-    if (pop(m) < 0)
-    {
-      m->pc += get_short_arg(m) - 1;
-    }
-    else
-    {
-      m->pc += 2;
-    }
-    break;
-  }
-  case OP_IF_ICMPEQ:
-  {
-    if (pop(m) == pop(m))
-    {
-      m->pc += get_short_arg(m) - 1;
-    }
-    else
-    {
-      m->pc += 2;
-    }
-    break;
-  }
-  case OP_LDC_W:
-  {
-    push(m, get_constant(m, get_short_arg(m)));
-    m->pc += 2;
-    break;
-  }
-  case OP_ILOAD:
-  {
-    m->pc++;
-    push(m, get_local_variable(m, get_instruction(m)));
-    break;
-  }
-  case OP_ISTORE:
-  {
-    m->pc++;
-    m->st->data[get_instruction(m)] = pop(m);
-    break;
-  }
-  case OP_IINC:
-  {
-    m->pc++;
-    byte_t index = get_instruction(m);
-    m->pc++;
-    m->st->data[index] += get_instruction(m);
-    break;
-  }
-  case OP_WIDE:
-  {
-    m->pc++;
-    byte_t next_instruction = get_instruction(m);
-    m->pc++;
-    uint16_t index = (uint16_t)((uint16_t)get_instruction(m) << 8) | (uint16_t)get_text(m)[m->pc + 1];
-    m->pc++;
-    switch (next_instruction)
-    {
-    case OP_ILOAD:
-      push(m, get_local_variable(m, index));
+      m->pc++;
+      push(m, get_instruction(m));
       break;
+    }
+    case OP_DUP:
+    {
+      push(m, tos(m));
+      break;
+    }
+    case OP_IADD:
+    {
+      push(m, pop(m) + pop(m));
+      break;
+    }
+    case OP_IAND:
+    {
+      push(m, pop(m) & pop(m));
+      break;
+    }
+    case OP_IOR:
+    {
+      push(m, pop(m) | pop(m));
+      break;
+    }
+    case OP_ISUB:
+    {
+      int8_t val1 = pop(m);
+      int8_t val2 = pop(m);
+      push(m, val2 - val1);
+      break;
+    }
+    case OP_NOP:
+    {
+      break;
+    }
+    case OP_POP:
+    {
+      pop(m);
+      break;
+    }
+    case OP_SWAP:
+    {
+      int8_t val1 = pop(m);
+      int8_t val2 = pop(m);
+      push(m, val1);
+      push(m, val2);
+      break;
+    }
+    case OP_ERR:
+    {
+      fprintf(m->out, "ERROR\n");
+      m->is_finished = true;
+      break;
+    }
+    case OP_HALT:
+    {
+      m->is_finished = true;
+      break;
+    }
+    case OP_IN:
+    {
+      push(m, fgetc(m->in));
+      break;
+    }
+    case OP_OUT:
+    {
+      fprintf(m->out, "%c", (char)pop(m));
+      break;
+    }
+    case OP_GOTO:
+    {
+      m->pc += get_short_arg(m) - 1;
+      break;
+    }
+    case OP_IFEQ:
+    {
+      if (pop(m) == 0)
+      {
+        m->pc += get_short_arg(m) - 1;
+      }
+      else
+      {
+        m->pc += 2;
+      }
+      break;
+    }
+    case OP_IFLT:
+    {
+      if (pop(m) < 0)
+      {
+        m->pc += get_short_arg(m) - 1;
+      }
+      else
+      {
+        m->pc += 2;
+      }
+      break;
+    }
+    case OP_IF_ICMPEQ:
+    {
+      if (pop(m) == pop(m))
+      {
+        m->pc += get_short_arg(m) - 1;
+      }
+      else
+      {
+        m->pc += 2;
+      }
+      break;
+    }
+    case OP_LDC_W:
+    {
+      push(m, get_constant(m, get_short_arg(m)));
+      m->pc += 2;
+      break;
+    }
+    case OP_ILOAD:
+    {
+      m->pc++;
+      push(m, get_local_variable(m, get_instruction(m)));
+      break;
+    }
     case OP_ISTORE:
     {
-      m->st->data[index] = pop(m);
+      m->pc++;
+      m->st->data[get_instruction(m)] = pop(m);
       break;
     }
     case OP_IINC:
     {
       m->pc++;
+      byte_t index = get_instruction(m);
+      m->pc++;
       m->st->data[index] += get_instruction(m);
       break;
     }
+    case OP_WIDE:
+    {
+      m->pc++;
+      byte_t next_instruction = get_instruction(m);
+      m->pc++;
+      uint16_t index = (uint16_t)((uint16_t)get_instruction(m) << 8) | (uint16_t)get_text(m)[m->pc + 1];
+      m->pc++;
+      switch (next_instruction)
+      {
+        case OP_ILOAD:
+          push(m, get_local_variable(m, index));
+          break;
+        case OP_ISTORE:
+        {
+          m->st->data[index] = pop(m);
+          break;
+        }
+        case OP_IINC:
+        {
+          m->pc++;
+          m->st->data[index] += get_instruction(m);
+          break;
+        }
+      }
+      break;
     }
-    break;
+    case OP_INVOKEVIRTUAL:
+    {
+      print_stack(m);
+      
+      int16_t index_constant = get_short_arg(m);
+      word_t old_pc = m->pc;
+      m->pc = get_constant(m, index_constant);
+
+      word_t arg_count = get_short_arg(m);
+      m->pc += 2;
+      word_t local_var_count = get_short_arg(m);
+      m->pc += 2;
+
+      word_t old_lv = m->lv;
+      m->lv = m->st->index_top-arg_count;
+      m->st->data[m->lv] = m->lv+arg_count+local_var_count;
+
+      for (size_t i = 0; i < local_var_count; i++)
+      {
+        push(m, 0);
+      }
+
+      push(m, old_pc);
+      push(m, old_lv);
+
+      break;
+    }
+    case OP_IRETURN: {
+      word_t return_value = pop(m);
+
+      m->st->index_top = m->lv;
+      m->pc = m->st->data[m->st->data[m->st->index_top]]+3;
+      m->lv = m->st->data[m->st->data[m->st->index_top]+1];
+
+      push(m, return_value);
+
+      break;
+    }
   }
-  }
+  print_stack(m);
   m->pc++;
 }
 

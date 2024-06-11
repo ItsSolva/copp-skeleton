@@ -30,6 +30,7 @@ typedef struct IJVM {
 
   // Program Counter
   word_t pc;
+  word_t lv;
   bool is_finished;
 
   // Stack
