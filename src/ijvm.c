@@ -148,7 +148,7 @@ int16_t get_short_arg(ijvm *m)
 void print_stack(ijvm *m)
 {
   printf("STACK: ");
-  for (int i = 0; i < m->st->index_top; i++)
+  for (int i = 255; i < m->st->index_top; i++)
   {
     printf("%d, ", m->st->data[i]);
   }
@@ -157,10 +157,11 @@ void print_stack(ijvm *m)
 
 void step(ijvm *m)
 {
-  if (get_program_counter(m) + 1 >= get_text_size(m))
+  fprintf(stderr, "\nSTEP - PC: %d - TEXT SIZE: %d\n", get_program_counter(m), get_text_size(m));
+  if (get_program_counter(m) +1 >= get_text_size(m))
   {
     m->is_finished = true;
-    return;
+    
   }
 
   byte_t instruction = get_instruction(m);
@@ -282,7 +283,7 @@ void step(ijvm *m)
     case OP_LDC_W:
     {
       push(m, get_constant(m, get_short_arg(m)));
-      m->pc += 2;
+      m->pc += 2  ;
       break;
     }
     case OP_ILOAD:
@@ -332,46 +333,70 @@ void step(ijvm *m)
       break;
     }
     case OP_INVOKEVIRTUAL:
-    {
-      print_stack(m);
-      
-      int16_t index_constant = get_short_arg(m);
-      word_t old_pc = m->pc;
-      m->pc = get_constant(m, index_constant);
+        {
+            // print_stack(m);
+            
+            int16_t index_constant = get_short_arg(m);
+            
+            // Save the current frame
+            word_t old_pc = m->pc;
+            word_t old_lv = m->lv;
+            
+            // Jump to the method area
+            m->pc = get_constant(m, index_constant)-1;
+            // fprintf(stderr, "Jumping to method area at %d\n", m->pc);
 
-      word_t arg_count = get_short_arg(m);
-      m->pc += 2;
-      word_t local_var_count = get_short_arg(m);
-      m->pc += 2;
+            // Read number of arguments and local variables from method area
+            word_t arg_count = get_short_arg(m);
+            m->pc += 2;
+            word_t local_var_count = get_short_arg(m);
+            m->pc += 2;
 
-      word_t old_lv = m->lv;
-      m->lv = m->st->index_top-arg_count;
-      m->st->data[m->lv] = m->lv+arg_count+local_var_count;
 
-      for (size_t i = 0; i < local_var_count; i++)
-      {
-        push(m, 0);
-      }
+            // Set the new frame pointer
+            m->lv = m->st->index_top - arg_count + 1;
+            m->st->data[m->lv] = m->lv + arg_count + local_var_count;
 
-      push(m, old_pc);
-      push(m, old_lv);
+            // Allocate space for local variables
+            for (size_t i = 0; i < local_var_count; i++)
+            {
+                push(m, -69);
+            }
 
-      break;
-    }
-    case OP_IRETURN: {
-      word_t return_value = pop(m);
+            // Push the return address and old local variable pointer onto the stack
+            push(m, old_pc); // Return address (pc after INVOKEVIRTUAL instruction)
+            push(m, old_lv);
 
-      m->st->index_top = m->lv;
-      m->pc = m->st->data[m->st->data[m->st->index_top]]+3;
-      m->lv = m->st->data[m->st->data[m->st->index_top]+1];
+            fprintf(stderr, "ARG: %d - Local Vars: %d\n", arg_count, local_var_count);
 
-      push(m, return_value);
+            break;
+        }
+        case OP_IRETURN:
+        {
+          fprintf(stderr, "RETURN\n");
+            word_t return_value = pop(m);
 
-      break;
-    }
+            // Remove the arguments from the stack
+            m->st->index_top = m->lv-1;
+
+            // Restore the old frame
+            word_t old_pc = m->st->data[m->lv];
+            word_t old_lv = m->st->data[m->lv+1];
+
+            // Restore the program counter and local variable pointer
+            m->pc = old_pc+2;
+            m->lv = old_lv;
+
+
+            // Push the return value onto the stack
+            push(m, return_value);
+
+            break;
+        }
   }
   print_stack(m);
   m->pc++;
+  fprintf(stderr, "PC: %d\n", m->pc);
 }
 
 byte_t get_instruction(ijvm *m)
