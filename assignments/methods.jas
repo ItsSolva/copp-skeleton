@@ -1,0 +1,35 @@
+.main
+    IN
+    INVOKEVIRTUAL is_even
+    HALT
+.end-main
+
+.method is_even(x)
+    ILOAD x
+    IFEQ ZERO
+    ILOAD x
+    BIPUSH 0x1
+    ISUB
+    INVOKEVIRTUAL is_odd
+    IRETURN
+    
+    ZERO:
+        BIPUSH 0x54
+        OUT
+.end-method
+
+.method is_odd(x)
+    ILOAD x
+    IFEQ ZERO2
+
+    ILOAD x
+    BIPUSH 0x1
+    ISUB
+   
+    INVOKEVIRTUAL is_even
+    IRETURN
+   
+    ZERO2:
+         BIPUSH 0x46
+         OUT
+.end-method
