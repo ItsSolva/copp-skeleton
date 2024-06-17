@@ -5,7 +5,7 @@
 #include "ijvm_types.h"
 
 typedef struct STACK {
-  int8_t *data;
+  word_t *data;
   uint32_t size;
   uint32_t index_top;
 

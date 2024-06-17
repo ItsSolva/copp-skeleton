@@ -7,22 +7,22 @@
 
 // see ijvm.h for descriptions of the below functions
 
-void push(ijvm *m, int8_t value)
+void push(ijvm *m, word_t value)
 {
   // Check if stack is full
   if (m->st->index_top >= m->st->size)
   {
     m->st->size *= 2;
-    m->st->data = (int8_t *)realloc(m->st->data, m->st->size);
+    m->st->data = (word_t *)realloc(m->st->data, sizeof(word_t)*m->st->size);
   }
 
   m->st->data[m->st->index_top] = value;
   m->st->index_top++;
 }
 
-int8_t pop(ijvm *m)
+word_t pop(ijvm *m)
 {
-  int8_t value = tos(m);
+  word_t value = tos(m);
   m->st->index_top--;
   return value;
 }
@@ -88,7 +88,7 @@ ijvm *init_ijvm(char *binary_path, FILE *input, FILE *output)
   m->st = (stack *)malloc(sizeof(stack));
   m->st->index_top = 0;
   m->st->size = 1024;
-  m->st->data = (int8_t *)malloc(sizeof(int8_t) * m->st->size);
+  m->st->data = (word_t *)malloc(sizeof(word_t) * m->st->size);
 
   m->lv = 0;
   for (int i = 0; i < 256; i++)
@@ -159,7 +159,6 @@ void print_stack(ijvm *m)
 
 void step(ijvm *m)
 {
-  fprintf(stderr, "\nSTEP - PC: %d - TEXT SIZE: %d\n", get_program_counter(m), get_text_size(m));
 
   byte_t instruction = get_instruction(m);
 
@@ -168,7 +167,7 @@ void step(ijvm *m)
   case OP_BIPUSH:
   {
     m->pc++;
-    push(m, get_instruction(m));
+    push(m, (int8_t)get_instruction(m));
     m->pc++;
     break;
   }
@@ -198,8 +197,8 @@ void step(ijvm *m)
   }
   case OP_ISUB:
   {
-    int8_t val1 = pop(m);
-    int8_t val2 = pop(m);
+    word_t val1 = pop(m);
+    word_t val2 = pop(m);
     push(m, val2 - val1);
     m->pc++;
     break;
@@ -217,8 +216,8 @@ void step(ijvm *m)
   }
   case OP_SWAP:
   {
-    int8_t val1 = pop(m);
-    int8_t val2 = pop(m);
+    word_t val1 = pop(m);
+    word_t val2 = pop(m);
     push(m, val1);
     push(m, val2);
     m->pc++;
@@ -248,7 +247,7 @@ void step(ijvm *m)
   }
   case OP_OUT:
   {
-    fprintf(m->out, "%c", (char)pop(m));
+    fprintf(m->out, "%c", pop(m));
     m->pc++;
     break;
   }
@@ -318,7 +317,7 @@ void step(ijvm *m)
     m->pc++;
     byte_t index = get_instruction(m);
     m->pc++;
-    m->st->data[m->lv + index] += get_instruction(m);
+    m->st->data[m->lv + index] += (int8_t)get_instruction(m);
     m->pc++;
     break;
   }
@@ -341,7 +340,7 @@ void step(ijvm *m)
     case OP_IINC:
     {
       m->pc += 3;
-      m->st->data[index] += get_instruction(m);
+      m->st->data[m->lv + index] += (int8_t)get_instruction(m);
       m->pc++;
       break;
     }
@@ -350,57 +349,38 @@ void step(ijvm *m)
   }
   case OP_INVOKEVIRTUAL:
   {
-    // print_stack(m);
-
-    // Save the current frame
     word_t old_pc = m->pc;
     word_t old_lv = m->lv;
 
-    // Jump to the method area
-    int16_t index_constant = get_short_arg(m);
-    m->pc = get_constant(m, index_constant);
-    // fprintf(stderr, "Jumping to method area at %d\n", m->pc);
+    m->pc = get_constant(m, get_short_arg(m));
 
-    // Read number of arguments and local variables from method area
     word_t arg_count = read_uint16(get_text(m) + m->pc);
     m->pc += 2;
     word_t local_var_count = read_uint16(get_text(m) + m->pc);
     m->pc += 2;
 
-    // Allocate space for local variables
     for (size_t i = 0; i < local_var_count; i++)
     {
       push(m, -69);
     }
 
-    // Set the new frame pointer
     m->lv = m->st->index_top - arg_count - local_var_count;
     m->st->data[m->lv] = m->st->index_top;
 
-    // Push the return address and old local variable pointer onto the stack
-    push(m, old_pc); // Return address (pc after INVOKEVIRTUAL instruction)
+    push(m, old_pc);
     push(m, old_lv);
-
-    fprintf(stderr, "ARG: %d - Local Vars: %d\n", arg_count, local_var_count);
 
     break;
   }
   case OP_IRETURN:
   {
-    fprintf(stderr, "RETURN\n");
-
-    // Remove the arguments from the stack
     word_t return_value = pop(m);
-    
 
-    // Restore the old frame
     m->st->index_top = m->lv;
-    fprintf(stderr, "Old frame: %d\nOld PC: %d\n", m->st->data[m->lv], m->st->data[m->st->data[m->lv]] + 3);
 
-    m->pc = m->st->data[m->st->data[m->lv]] + 3;
+    m->pc = m->st->data[m->st->data[m->lv]]+3;
     m->lv = m->st->data[m->st->data[m->lv] + 1];
 
-    // Push the return value onto the stack
     push(m, return_value);
 
     break;
@@ -409,8 +389,7 @@ void step(ijvm *m)
     m->pc++;
     break;
   }
-  print_stack(m);
-  fprintf(stderr, "PC: %d\n", m->pc);
+  // print_stack(m);
 }
 
 byte_t get_instruction(ijvm *m)

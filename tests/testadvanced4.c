@@ -18,7 +18,10 @@ void run_calc_inp(char *input, char *expected)
     assert(m != NULL);
 
     // Run program
-    run(m);
+    while(!finished(m))
+    {
+        step(m);
+    }
 
     rewind(out_file);
     memset(buf, '\0', 128);
@@ -54,6 +57,7 @@ void test_calc_3(void)
 
 void test_calc_4(void)
 {
+    fprintf(stderr, "-------------------\ntest_calc_1\n-------------------\n");
     run_calc_inp("2 2 2 2 2 2 2 2 2 2 2 2 2 2 ************ +?.", "8194\n");
 }
 
