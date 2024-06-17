@@ -9,21 +9,22 @@
 
 void push(ijvm *m, int8_t value)
 {
-  m->st->data[m->st->index_top] = value;
-  m->st->index_top++;
-
   // Check if stack is full
   if (m->st->index_top >= m->st->size)
   {
     m->st->size *= 2;
     m->st->data = (int8_t *)realloc(m->st->data, m->st->size);
   }
+
+  m->st->data[m->st->index_top] = value;
+  m->st->index_top++;
 }
 
 int8_t pop(ijvm *m)
 {
+  int8_t value = tos(m);
   m->st->index_top--;
-  return m->st->data[m->st->index_top];
+  return value;
 }
 
 ijvm *init_ijvm(char *binary_path, FILE *input, FILE *output)
@@ -130,13 +131,14 @@ word_t tos(ijvm *m)
 
 bool finished(ijvm *m)
 {
+  if (get_program_counter(m) >= get_text_size(m))
+    m->is_finished = true;
   return m->is_finished;
 }
 
 word_t get_local_variable(ijvm *m, int i)
 {
-  word_t local_var = m->st->data[i + m->lv];
-  return local_var;
+  return m->st->data[i + m->lv];
 }
 
 int16_t get_short_arg(ijvm *m)
@@ -158,244 +160,256 @@ void print_stack(ijvm *m)
 void step(ijvm *m)
 {
   fprintf(stderr, "\nSTEP - PC: %d - TEXT SIZE: %d\n", get_program_counter(m), get_text_size(m));
-  if (get_program_counter(m) +1 >= get_text_size(m))
-  {
-    m->is_finished = true;
-    
-  }
 
   byte_t instruction = get_instruction(m);
 
   switch (instruction)
   {
-    case OP_BIPUSH:
+  case OP_BIPUSH:
+  {
+    m->pc++;
+    push(m, get_instruction(m));
+    m->pc++;
+    break;
+  }
+  case OP_DUP:
+  {
+    push(m, tos(m));
+    m->pc++;
+    break;
+  }
+  case OP_IADD:
+  {
+    push(m, pop(m) + pop(m));
+    m->pc++;
+    break;
+  }
+  case OP_IAND:
+  {
+    push(m, pop(m) & pop(m));
+    m->pc++;
+    break;
+  }
+  case OP_IOR:
+  {
+    push(m, pop(m) | pop(m));
+    m->pc++;
+    break;
+  }
+  case OP_ISUB:
+  {
+    int8_t val1 = pop(m);
+    int8_t val2 = pop(m);
+    push(m, val2 - val1);
+    m->pc++;
+    break;
+  }
+  case OP_NOP:
+  {
+    m->pc++;
+    break;
+  }
+  case OP_POP:
+  {
+    pop(m);
+    m->pc++;
+    break;
+  }
+  case OP_SWAP:
+  {
+    int8_t val1 = pop(m);
+    int8_t val2 = pop(m);
+    push(m, val1);
+    push(m, val2);
+    m->pc++;
+    break;
+  }
+  case OP_ERR:
+  {
+    fprintf(m->out, "ERROR\n");
+    m->is_finished = true;
+    break;
+  }
+  case OP_HALT:
+  {
+    m->is_finished = true;
+    m->pc++;
+    break;
+  }
+  case OP_IN:
+  {
+    int c = fgetc(m->in);
+    if (c == EOF)
+      push(m, 0);
+    else
+      push(m, c);
+    m->pc++;
+    break;
+  }
+  case OP_OUT:
+  {
+    fprintf(m->out, "%c", (char)pop(m));
+    m->pc++;
+    break;
+  }
+  case OP_GOTO:
+  {
+    m->pc += get_short_arg(m);
+    break;
+  }
+  case OP_IFEQ:
+  {
+    if (pop(m) == 0)
     {
-      m->pc++;
-      push(m, get_instruction(m));
-      break;
+      m->pc += get_short_arg(m);
     }
-    case OP_DUP:
+    else
     {
-      push(m, tos(m));
-      break;
+      m->pc += 3;
     }
-    case OP_IADD:
+    break;
+  }
+  case OP_IFLT:
+  {
+    if (pop(m) < 0)
     {
-      push(m, pop(m) + pop(m));
-      break;
+      m->pc += get_short_arg(m);
     }
-    case OP_IAND:
+    else
     {
-      push(m, pop(m) & pop(m));
-      break;
+      m->pc += 3;
     }
-    case OP_IOR:
+    break;
+  }
+  case OP_IF_ICMPEQ:
+  {
+    if (pop(m) == pop(m))
     {
-      push(m, pop(m) | pop(m));
-      break;
+      m->pc += get_short_arg(m);
     }
-    case OP_ISUB:
+    else
     {
-      int8_t val1 = pop(m);
-      int8_t val2 = pop(m);
-      push(m, val2 - val1);
-      break;
+      m->pc += 3;
     }
-    case OP_NOP:
+    break;
+  }
+  case OP_LDC_W:
+  {
+    push(m, get_constant(m, get_short_arg(m)));
+    m->pc += 3;
+    break;
+  }
+  case OP_ILOAD:
+  {
+    m->pc++;
+    push(m, get_local_variable(m, get_instruction(m)));
+    m->pc++;
+    break;
+  }
+  case OP_ISTORE:
+  {
+    m->pc++;
+    m->st->data[m->lv + get_instruction(m)] = pop(m);
+    m->pc++;
+    break;
+  }
+  case OP_IINC:
+  {
+    m->pc++;
+    byte_t index = get_instruction(m);
+    m->pc++;
+    m->st->data[m->lv + index] += get_instruction(m);
+    m->pc++;
+    break;
+  }
+  case OP_WIDE:
+  {
+    m->pc++;
+    uint16_t index = get_short_arg(m);
+    switch (get_instruction(m))
     {
-      break;
-    }
-    case OP_POP:
-    {
-      pop(m);
-      break;
-    }
-    case OP_SWAP:
-    {
-      int8_t val1 = pop(m);
-      int8_t val2 = pop(m);
-      push(m, val1);
-      push(m, val2);
-      break;
-    }
-    case OP_ERR:
-    {
-      fprintf(m->out, "ERROR\n");
-      m->is_finished = true;
-      break;
-    }
-    case OP_HALT:
-    {
-      m->is_finished = true;
-      break;
-    }
-    case OP_IN:
-    {
-      push(m, fgetc(m->in));
-      break;
-    }
-    case OP_OUT:
-    {
-      fprintf(m->out, "%c", (char)pop(m));
-      break;
-    }
-    case OP_GOTO:
-    {
-      m->pc += get_short_arg(m) - 1;
-      break;
-    }
-    case OP_IFEQ:
-    {
-      if (pop(m) == 0)
-      {
-        m->pc += get_short_arg(m) - 1;
-      }
-      else
-      {
-        m->pc += 2;
-      }
-      break;
-    }
-    case OP_IFLT:
-    {
-      if (pop(m) < 0)
-      {
-        m->pc += get_short_arg(m) - 1;
-      }
-      else
-      {
-        m->pc += 2;
-      }
-      break;
-    }
-    case OP_IF_ICMPEQ:
-    {
-      if (pop(m) == pop(m))
-      {
-        m->pc += get_short_arg(m) - 1;
-      }
-      else
-      {
-        m->pc += 2;
-      }
-      break;
-    }
-    case OP_LDC_W:
-    {
-      push(m, get_constant(m, get_short_arg(m)));
-      m->pc += 2  ;
-      break;
-    }
     case OP_ILOAD:
-    {
-      m->pc++;
-      push(m, get_local_variable(m, get_instruction(m)));
+      push(m, get_local_variable(m, index));
+      m->pc += 3;
       break;
-    }
     case OP_ISTORE:
     {
-      m->pc++;
-      m->st->data[get_instruction(m)] = pop(m);
+      m->st->data[m->lv + index] = pop(m);
+      m->pc += 3;
       break;
     }
     case OP_IINC:
     {
-      m->pc++;
-      byte_t index = get_instruction(m);
-      m->pc++;
+      m->pc += 3;
       m->st->data[index] += get_instruction(m);
+      m->pc++;
       break;
     }
-    case OP_WIDE:
+    }
+    break;
+  }
+  case OP_INVOKEVIRTUAL:
+  {
+    // print_stack(m);
+
+    // Save the current frame
+    word_t old_pc = m->pc;
+    word_t old_lv = m->lv;
+
+    // Jump to the method area
+    int16_t index_constant = get_short_arg(m);
+    m->pc = get_constant(m, index_constant);
+    // fprintf(stderr, "Jumping to method area at %d\n", m->pc);
+
+    // Read number of arguments and local variables from method area
+    word_t arg_count = read_uint16(get_text(m) + m->pc);
+    m->pc += 2;
+    word_t local_var_count = read_uint16(get_text(m) + m->pc);
+    m->pc += 2;
+
+    // Allocate space for local variables
+    for (size_t i = 0; i < local_var_count; i++)
     {
-      m->pc++;
-      byte_t next_instruction = get_instruction(m);
-      m->pc++;
-      uint16_t index = (uint16_t)((uint16_t)get_instruction(m) << 8) | (uint16_t)get_text(m)[m->pc + 1];
-      m->pc++;
-      switch (next_instruction)
-      {
-        case OP_ILOAD:
-          push(m, get_local_variable(m, index));
-          break;
-        case OP_ISTORE:
-        {
-          m->st->data[index] = pop(m);
-          break;
-        }
-        case OP_IINC:
-        {
-          m->pc++;
-          m->st->data[index] += get_instruction(m);
-          break;
-        }
-      }
-      break;
+      push(m, -69);
     }
-    case OP_INVOKEVIRTUAL:
-        {
-            // print_stack(m);
-            
-            int16_t index_constant = get_short_arg(m);
-            
-            // Save the current frame
-            word_t old_pc = m->pc;
-            word_t old_lv = m->lv;
-            
-            // Jump to the method area
-            m->pc = get_constant(m, index_constant)-1;
-            // fprintf(stderr, "Jumping to method area at %d\n", m->pc);
 
-            // Read number of arguments and local variables from method area
-            word_t arg_count = get_short_arg(m);
-            m->pc += 2;
-            word_t local_var_count = get_short_arg(m);
-            m->pc += 2;
+    // Set the new frame pointer
+    m->lv = m->st->index_top - arg_count - local_var_count;
+    m->st->data[m->lv] = m->st->index_top;
 
+    // Push the return address and old local variable pointer onto the stack
+    push(m, old_pc); // Return address (pc after INVOKEVIRTUAL instruction)
+    push(m, old_lv);
 
-            // Set the new frame pointer
-            m->lv = m->st->index_top - arg_count + 1;
-            m->st->data[m->lv] = m->lv + arg_count + local_var_count;
+    fprintf(stderr, "ARG: %d - Local Vars: %d\n", arg_count, local_var_count);
 
-            // Allocate space for local variables
-            for (size_t i = 0; i < local_var_count; i++)
-            {
-                push(m, -69);
-            }
+    break;
+  }
+  case OP_IRETURN:
+  {
+    fprintf(stderr, "RETURN\n");
 
-            // Push the return address and old local variable pointer onto the stack
-            push(m, old_pc); // Return address (pc after INVOKEVIRTUAL instruction)
-            push(m, old_lv);
+    // Remove the arguments from the stack
+    word_t return_value = pop(m);
+    
 
-            fprintf(stderr, "ARG: %d - Local Vars: %d\n", arg_count, local_var_count);
+    // Restore the old frame
+    m->st->index_top = m->lv;
+    fprintf(stderr, "Old frame: %d\nOld PC: %d\n", m->st->data[m->lv], m->st->data[m->st->data[m->lv]] + 3);
 
-            break;
-        }
-        case OP_IRETURN:
-        {
-          fprintf(stderr, "RETURN\n");
-            word_t return_value = pop(m);
+    m->pc = m->st->data[m->st->data[m->lv]] + 3;
+    m->lv = m->st->data[m->st->data[m->lv] + 1];
 
-            // Remove the arguments from the stack
-            m->st->index_top = m->lv-1;
+    // Push the return value onto the stack
+    push(m, return_value);
 
-            // Restore the old frame
-            word_t old_pc = m->st->data[m->lv];
-            word_t old_lv = m->st->data[m->lv+1];
-
-            // Restore the program counter and local variable pointer
-            m->pc = old_pc+2;
-            m->lv = old_lv;
-
-
-            // Push the return value onto the stack
-            push(m, return_value);
-
-            break;
-        }
+    break;
+  }
+  default:
+    m->pc++;
+    break;
   }
   print_stack(m);
-  m->pc++;
   fprintf(stderr, "PC: %d\n", m->pc);
 }
 
